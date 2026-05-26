@@ -54,9 +54,11 @@ jobs:
           node-version: '22'
 
       - name: Build web dashboard
+        shell: bash
         run: cd web && npm ci && npm run build
 
       - name: Build TUI bundle
+        shell: bash
         run: cd ui-tui && npm ci && npm run build
 
       - name: Bundle TUI into hermes_cli
