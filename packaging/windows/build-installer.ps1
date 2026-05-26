@@ -131,6 +131,7 @@ foreach ($cmd in $Wrappers.Keys) {
     @"
 @echo off
 set "PYTHONHOME=%~dp0python"
+set "HERMES_HOME=%USERPROFILE%\.hermes"
 set "HERMES_BUNDLED_SKILLS=%~dp0skills"
 set "HERMES_OPTIONAL_SKILLS=%~dp0optional-skills"
 "%~dp0$PythonRelExe" -c "import sys; sys.argv[0] = '$cmd'; from $module import $func; $func()" %*
@@ -139,6 +140,7 @@ set "HERMES_OPTIONAL_SKILLS=%~dp0optional-skills"
     # .ps1 wrapper for PowerShell
     @"
 `$env:PYTHONHOME = "`$PSScriptRoot\python"
+`$env:HERMES_HOME = "`$env:USERPROFILE\.hermes"
 `$env:HERMES_BUNDLED_SKILLS = "`$PSScriptRoot\skills"
 `$env:HERMES_OPTIONAL_SKILLS = "`$PSScriptRoot\optional-skills"
 & "`$PSScriptRoot\$PythonRelExe" -c "import sys; sys.argv[0] = '$cmd'; from $module import $func; $func()" @args
@@ -200,7 +202,7 @@ Name: "{group}\Hermes Agent"; Filename: "{cmd}"; Parameters: "/k ""{app}\hermes.
 Name: "{group}\Uninstall Hermes Agent"; Filename: "{uninstallexe}"
 
 [Registry]
-Root: HKCU; Subkey: "Environment"; ValueType: string; ValueName: "HERMES_HOME"; ValueData: "{%USERPROFILE}\.hermes"; Flags: createvalueifdoesntexist uninsdeletevalue
+Root: HKCU; Subkey: "Environment"; ValueType: string; ValueName: "HERMES_HOME"; ValueData: "{%USERPROFILE}\.hermes"; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Environment"; ValueType: string; ValueName: "HERMES_BUNDLED_SKILLS"; ValueData: "{app}\skills"; Flags: createvalueifdoesntexist uninsdeletevalue
 Root: HKCU; Subkey: "Environment"; ValueType: string; ValueName: "HERMES_OPTIONAL_SKILLS"; ValueData: "{app}\optional-skills"; Flags: createvalueifdoesntexist uninsdeletevalue
 
