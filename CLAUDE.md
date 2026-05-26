@@ -12,20 +12,28 @@ uv pip install -e ".[all,dev]"  # First-time setup (requires uv)
 ## Commands
 
 ```bash
-# Run tests
-python -m pytest tests/ -q                         # Full suite (~3000 tests)
-python -m pytest tests/ -n auto                    # Parallel (matches CI)
-python -m pytest tests/gateway/ -q                 # Subset
-python -m pytest tests/test_model_tools.py::TestFoo::test_bar -v  # Single test
+# Run tests (scripts/run_tests.sh matches CI — fixed workers, UTC, PYTHONHASHSEED=0)
+scripts/run_tests.sh                               # Full suite (recommended)
+scripts/run_tests.sh tests/gateway/               # Subset
+scripts/run_tests.sh tests/test_model_tools.py::TestFoo::test_bar -v  # Single test
+python -m pytest tests/ -n auto                   # Alternate (diverges from CI on worker count)
 
 # Run the agent
 hermes                    # Interactive CLI
 hermes gateway            # Messaging platform bridge
+hermes-acp                # ACP (Agent Client Protocol) server
 ```
 
 Always run the full suite before pushing changes. Integration tests (`tests/integration/`, `tests/e2e/`) require external API keys and are skipped in CI.
 
-There is no linter or formatter configured in CI — no ruff, black, flake8, or mypy. Follow PEP 8 with practical exceptions (no strict line length enforcement).
+### Linting (CI-enforced)
+
+Two checks block merge:
+
+1. **`ruff check .`** — enforces PLW1514: all `open()`, `read_text()`, `write_text()` calls must include explicit `encoding=`. Bare calls default to locale encoding on Windows (cp1252), silently corrupting non-ASCII content.
+2. **`python scripts/check-windows-footguns.py --all`** — static check for Windows-unsafe patterns (`os.kill(pid, 0)`, `os.killpg`, `os.setsid`, `signal.SIGKILL` without `getattr` fallback, etc.).
+
+`ruff` and `ty` also run as an advisory diff on PRs (exit-zero, posts a comment). No formatting enforcer (black/isort) in CI. Follow PEP 8 with practical exceptions.
 
 ## Architecture
 
@@ -40,7 +48,7 @@ tools/*.py  (each calls registry.register() at import time)
        ↑
 model_tools.py  (imports tools/registry, triggers _discover_tools())
        ↑
-run_agent.py, cli.py, batch_runner.py, environments/
+run_agent.py, cli.py, batch_runner.py, tools/environments/
 ```
 
 ### Key Files
