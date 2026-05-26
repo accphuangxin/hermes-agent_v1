@@ -106,7 +106,6 @@ jobs:
         with:
           name: windows-packages
           path: |
-            dist/*-windows-*-portable.zip
             dist/*-windows-*-setup.exe
           retention-days: 30
           if-no-files-found: error
@@ -151,7 +150,6 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           gh release upload "$GITHUB_REF_NAME" \
-            dist/*-windows-*-portable.zip \
             dist/*-windows-*-setup.exe \
             --repo "$GITHUB_REPOSITORY" \
             --clobber

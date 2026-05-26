@@ -145,15 +145,8 @@ set "HERMES_OPTIONAL_SKILLS=%~dp0optional-skills"
 "@ | Set-Content -Path "$InstallDir\$cmd.ps1" -Encoding UTF8
 }
 
-# --- Step 5: Create portable zip ---
-Write-Host "[5/6] Creating portable archive..." -ForegroundColor Yellow
-
-$ZipOutput = "$Output-portable.zip"
-if (Test-Path $ZipOutput) { Remove-Item $ZipOutput }
-Compress-Archive -Path "$InstallDir\*" -DestinationPath $ZipOutput -CompressionLevel Optimal
-
-$ZipSize = "{0:N1} MB" -f ((Get-Item $ZipOutput).Length / 1MB)
-Write-Host "  Portable: $ZipOutput ($ZipSize)" -ForegroundColor Green
+# --- Step 5: Skipped (portable zip not required) ---
+Write-Host "[5/6] Skipped (zip packaging disabled)" -ForegroundColor Gray
 
 # --- Step 6: Build Inno Setup installer ---
 if (-not $PortableOnly) {
