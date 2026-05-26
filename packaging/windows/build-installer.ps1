@@ -207,13 +207,13 @@ Name: "{group}\Hermes Agent"; Filename: "{cmd}"; Parameters: "/k ""{app}\hermes.
 Name: "{group}\Uninstall Hermes Agent"; Filename: "{uninstallexe}"
 
 [Registry]
-Root: HKCU; Subkey: "Environment"; ValueType: string; ValueName: "HERMES_HOME"; ValueData: "{localappdata}\hermes"; Flags: createvalueifdoesntexist uninsdeletevalue
+Root: HKCU; Subkey: "Environment"; ValueType: string; ValueName: "HERMES_HOME"; ValueData: "{%USERPROFILE%}\.hermes"; Flags: createvalueifdoesntexist uninsdeletevalue
 Root: HKCU; Subkey: "Environment"; ValueType: string; ValueName: "HERMES_BUNDLED_SKILLS"; ValueData: "{app}\skills"; Flags: createvalueifdoesntexist uninsdeletevalue
 Root: HKCU; Subkey: "Environment"; ValueType: string; ValueName: "HERMES_OPTIONAL_SKILLS"; ValueData: "{app}\optional-skills"; Flags: createvalueifdoesntexist uninsdeletevalue
 
 [Run]
-Filename: "{cmd}"; Parameters: "/c mkdir ""{localappdata}\hermes\sessions"" ""{localappdata}\hermes\cron"" ""{localappdata}\hermes\memories"" ""{localappdata}\hermes\skills"" ""{localappdata}\hermes\logs"""; Flags: runhidden
-Filename: "{cmd}"; Parameters: "/c if not exist ""{localappdata}\hermes\config.yaml"" (echo browser:> ""{localappdata}\hermes\config.yaml"" && echo   cdp_url: ""http://localhost:9222"">> ""{localappdata}\hermes\config.yaml"")"; Flags: runhidden
+Filename: "{cmd}"; Parameters: "/c mkdir ""%USERPROFILE%\.hermes\sessions"" ""%USERPROFILE%\.hermes\cron"" ""%USERPROFILE%\.hermes\memories"" ""%USERPROFILE%\.hermes\skills"" ""%USERPROFILE%\.hermes\logs"""; Flags: runhidden
+Filename: "{cmd}"; Parameters: "/c if not exist ""%USERPROFILE%\.hermes\config.yaml"" (echo browser:> ""%USERPROFILE%\.hermes\config.yaml"" && echo   cdp_url: ""http://localhost:9222"">> ""%USERPROFILE%\.hermes\config.yaml"")"; Flags: runhidden
 Filename: "schtasks.exe"; Parameters: "/create /tn ""HermesGateway"" /tr ""{app}\hermes.cmd gateway start"" /sc ONLOGON /ru ""%USERNAME%"" /f /rl LIMITED"; Flags: runhidden
 Filename: "schtasks.exe"; Parameters: "/run /tn ""HermesGateway"""; Flags: runhidden nowait
 Filename: "{cmd}"; Parameters: "/k echo. & echo   Hermes Agent installed successfully! & echo. & echo   Run 'hermes setup' to configure your LLM provider. & echo. & pause"; Description: "Open terminal with instructions"; Flags: postinstall nowait
