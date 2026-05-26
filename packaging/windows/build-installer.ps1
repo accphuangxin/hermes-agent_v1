@@ -200,7 +200,7 @@ Name: "{group}\Hermes Agent"; Filename: "{cmd}"; Parameters: "/k ""{app}\hermes.
 Name: "{group}\Uninstall Hermes Agent"; Filename: "{uninstallexe}"
 
 [Registry]
-Root: HKCU; Subkey: "Environment"; ValueType: string; ValueName: "HERMES_HOME"; ValueData: "{%USERPROFILE%}\.hermes"; Flags: createvalueifdoesntexist uninsdeletevalue
+Root: HKCU; Subkey: "Environment"; ValueType: string; ValueName: "HERMES_HOME"; ValueData: "{%USERPROFILE}\.hermes"; Flags: createvalueifdoesntexist uninsdeletevalue
 Root: HKCU; Subkey: "Environment"; ValueType: string; ValueName: "HERMES_BUNDLED_SKILLS"; ValueData: "{app}\skills"; Flags: createvalueifdoesntexist uninsdeletevalue
 Root: HKCU; Subkey: "Environment"; ValueType: string; ValueName: "HERMES_OPTIONAL_SKILLS"; ValueData: "{app}\optional-skills"; Flags: createvalueifdoesntexist uninsdeletevalue
 
