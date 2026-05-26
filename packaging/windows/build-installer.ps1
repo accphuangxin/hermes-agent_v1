@@ -63,7 +63,15 @@ uv python install $PythonVersion 2>$null
 
 # Find the uv-managed Python installation
 $PythonBin = (uv python find $PythonVersion).Trim()
-$PythonHome = Split-Path -Parent (Split-Path -Parent $PythonBin)
+Write-Host "  Found:  $PythonBin"
+# Windows layout: <install-dir>\python.exe  (one level up)
+# Unix layout:    <install-dir>/bin/python   (two levels up)
+$PythonBinDir = Split-Path -Parent $PythonBin
+if ((Split-Path -Leaf $PythonBinDir) -eq 'bin') {
+    $PythonHome = Split-Path -Parent $PythonBinDir
+} else {
+    $PythonHome = $PythonBinDir
+}
 
 Write-Host "  Source: $PythonHome"
 
