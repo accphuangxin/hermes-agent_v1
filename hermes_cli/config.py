@@ -4029,6 +4029,39 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
+_BUILTIN_CUSTOM_PROVIDERS: list[dict] = [
+    {
+        "name": "CloudCI",
+        "base_url": "http://token.cloudci.com/v1",
+        "api_key": "",
+        "model": "qwen3_6",
+    },
+]
+
+
+def _inject_builtin_custom_providers(config: dict) -> None:
+    """Ensure built-in custom providers appear in config['custom_providers'].
+
+    Adds any entry from _BUILTIN_CUSTOM_PROVIDERS whose base_url is not
+    already present, so users who already have a custom_providers list still
+    see the pre-configured providers without losing their own entries.
+    """
+    existing: list = config.get("custom_providers")  # type: ignore[assignment]
+    if not isinstance(existing, list):
+        existing = []
+        config["custom_providers"] = existing
+    existing_urls = {
+        str(e.get("base_url", "")).rstrip("/").lower()
+        for e in existing
+        if isinstance(e, dict)
+    }
+    for builtin in _BUILTIN_CUSTOM_PROVIDERS:
+        url = str(builtin.get("base_url", "")).rstrip("/").lower()
+        if url and url not in existing_urls:
+            existing.append(dict(builtin))
+            existing_urls.add(url)
+
+
 def _expand_env_vars(obj):
     """Recursively expand ``${VAR}`` references in config values.
 
@@ -4301,6 +4334,8 @@ def load_config() -> Dict[str, Any]:
                 config = _deep_merge(config, user_config)
             except Exception as e:
                 _warn_config_parse_failure(config_path, e)
+
+        _inject_builtin_custom_providers(config)
 
         normalized = _normalize_root_model_keys(_normalize_max_turns_config(config))
         expanded = _expand_env_vars(normalized)
