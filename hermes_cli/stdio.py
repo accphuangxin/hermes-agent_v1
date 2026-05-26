@@ -66,6 +66,47 @@ def _flip_console_code_page_to_utf8() -> None:
         pass
 
 
+def _enable_windows_vt_processing() -> None:
+    """Enable Virtual Terminal (ANSI escape sequence) processing on Windows.
+
+    cmd.exe and older PowerShell hosts on Windows 10+ support ANSI color codes
+    but require ENABLE_VIRTUAL_TERMINAL_PROCESSING (0x0004) to be set on the
+    stdout console handle via SetConsoleMode.  Without this flag the raw escape
+    sequences (e.g. ``\\033[35m``) are printed literally as garbled text.
+
+    This is a no-op when:
+    - stdout is not a real console handle (redirected, piped, CI)
+    - the console already has VT processing enabled
+    - running on a non-Windows platform
+
+    Windows 10 1511 (build 10586) and later support this flag natively.
+    On older Windows builds the call fails silently and we fall back to
+    stripping colours via ``should_use_color()`` returning False.
+    """
+    try:
+        import ctypes
+        import ctypes.wintypes
+
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+
+        # STD_OUTPUT_HANDLE = -11
+        h_out = kernel32.GetStdHandle(-11)
+        if h_out == ctypes.wintypes.HANDLE(-1).value:
+            return  # INVALID_HANDLE_VALUE — no console attached
+
+        mode = ctypes.wintypes.DWORD(0)
+        if not kernel32.GetConsoleMode(h_out, ctypes.byref(mode)):
+            return  # not a console handle (redirected)
+
+        ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+        if mode.value & ENABLE_VIRTUAL_TERMINAL_PROCESSING:
+            return  # already enabled
+
+        kernel32.SetConsoleMode(h_out, mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING)
+    except Exception:
+        pass
+
+
 def _reconfigure_stream(stream, *, encoding: str = "utf-8", errors: str = "replace") -> None:
     """Reconfigure a text stream to UTF-8 in place.
 
@@ -141,6 +182,9 @@ def configure_windows_stdio() -> bool:
     # Flip the console code page first so that any subprocess that
     # inherits the console (e.g. a launched shell) also sees CP_UTF8.
     _flip_console_code_page_to_utf8()
+    # Enable ANSI/VT escape sequence rendering so colour codes display
+    # correctly in cmd.exe and older PowerShell hosts on Windows 10+.
+    _enable_windows_vt_processing()
 
     # Reconfigure Python's own stdio wrappers so ``print()`` calls from
     # this process round-trip emoji / box-drawing / non-Latin text.
