@@ -31,10 +31,12 @@ jobs:
         include:
           - arch: arm64
             runner: macos-latest      # Apple Silicon (M-series)
+            timeout: 60
           - arch: x86_64
-            runner: macos-13          # Intel
+            runner: macos-13          # Intel — falls back to macos-12 if queue is long
+            timeout: 90               # extra time for slower Intel runner + queue wait
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: ${{ matrix.timeout }}
 
     steps:
       - name: Checkout code
