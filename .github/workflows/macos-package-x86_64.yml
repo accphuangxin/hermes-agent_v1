@@ -1,13 +1,9 @@
-name: macOS Package
+name: macOS Package (x86_64 / Intel)
 
-# Builds self-contained macOS .pkg installer for arm64 (Apple Silicon)
-# and x86_64 (Intel) — one job per architecture, run in parallel.
-# Triggers on CalVer tag pushes (same as windows-package.yml) and
-# workflow_dispatch for manual re-runs.
 on:
   push:
     tags:
-      - 'v20*'   # CalVer: v2026.5.15, v2026.5.15.2, etc.
+      - 'v20*'
   workflow_dispatch:
     inputs:
       confirm_tag:
@@ -19,27 +15,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: macos-package-${{ github.ref }}
+  group: macos-package-x86_64-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   build:
-    name: Build macOS .pkg (${{ matrix.arch }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: arm64
-            runner: macos-latest      # Apple Silicon (M-series)
-            timeout: 60
-            required: true
-          - arch: x86_64
-            runner: macos-13          # Intel — GitHub runner supply is limited; non-blocking
-            timeout: 90
-            required: false
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: ${{ matrix.timeout }}
-    continue-on-error: ${{ !matrix.required }}
+    name: Build macOS .pkg (x86_64)
+    runs-on: macos-13
+    timeout-minutes: 90
 
     steps:
       - name: Checkout code
@@ -86,17 +69,15 @@ jobs:
         run: |
           chmod +x packaging/macos/build-pkg.sh
           packaging/macos/build-pkg.sh
-        # Produces:
-        #   dist/hermes-agent-<ver>-macos-<arch>.pkg
 
       - name: List dist artifacts
         run: ls -lh dist/*.pkg
 
-      - name: Upload artifacts
+      - name: Upload artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
-          name: macos-package-${{ matrix.arch }}
-          path: dist/*-macos-*.pkg
+          name: macos-package-x86_64
+          path: dist/*-macos-x86_64.pkg
           retention-days: 30
           if-no-files-found: error
 
@@ -110,18 +91,11 @@ jobs:
       contents: write
 
     steps:
-      - name: Download arm64 artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
-        with:
-          name: macos-package-arm64
-          path: dist/
-
-      - name: Download x86_64 artifact (optional — Intel runner may have timed out)
+      - name: Download artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           name: macos-package-x86_64
           path: dist/
-        continue-on-error: true
 
       - name: Wait for GitHub Release to exist
         env:
@@ -138,12 +112,12 @@ jobs:
           echo "::warning::Release $GITHUB_REF_NAME not found after 5 minutes — skipping asset upload"
           echo "skip_upload=true" >> "$GITHUB_ENV"
 
-      - name: Upload macOS packages to release
+      - name: Upload to release
         if: env.skip_upload != 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           gh release upload "$GITHUB_REF_NAME" \
-            dist/*-macos-*.pkg \
+            dist/*-macos-x86_64.pkg \
             --repo "$GITHUB_REPOSITORY" \
             --clobber
