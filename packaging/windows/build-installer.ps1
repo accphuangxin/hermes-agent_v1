@@ -106,7 +106,7 @@ if (Test-Path "$InstallDir\python\python.exe") {
 # --- Step 2: Install hermes-agent and dependencies ---
 Write-Host "[2/6] Installing hermes-agent and dependencies..." -ForegroundColor Yellow
 
-uv pip install --python $PythonExe "$ProjectRoot[messaging,cron,mcp,honcho,acp,bedrock,dingtalk,feishu,google,homeassistant,sms,slack,tts-premium,web]"
+uv pip install --python $PythonExe "$ProjectRoot[anthropic,messaging,cron,mcp,honcho,acp,bedrock,dingtalk,feishu,google,homeassistant,sms,slack,tts-premium,web]"
 
 # --- Step 3: Copy bundled assets ---
 Write-Host "[3/6] Copying bundled skills and assets..." -ForegroundColor Yellow
