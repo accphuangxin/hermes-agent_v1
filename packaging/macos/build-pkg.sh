@@ -100,7 +100,7 @@ echo "[2/6] Installing hermes-agent and dependencies..."
 # Exclude only 'dev' and 'matrix' (matrix has broken native deps on macOS)
 uv pip install \
     --python "$PKG_ROOT$INSTALL_PREFIX/python/bin/python3" \
-    "$PROJECT_ROOT[messaging,cron,cli,pty,mcp,honcho,acp,bedrock,voice,mistral,dingtalk,feishu,google,homeassistant,sms,modal,daytona,slack,tts-premium,web]"
+    "$PROJECT_ROOT[messaging,cron,cli,pty,mcp,honcho,acp,bedrock,dingtalk,feishu,google,homeassistant,sms,modal,daytona,slack,tts-premium,web]"
 
 # --- Step 3: Copy bundled assets ---
 echo "[3/6] Copying bundled skills and assets..."
