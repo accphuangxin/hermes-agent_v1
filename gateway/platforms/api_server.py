@@ -941,25 +941,55 @@ class APIServerAdapter(BasePlatformAdapter):
         })
 
     async def _handle_models(self, request: "web.Request") -> "web.Response":
-        """GET /v1/models — return hermes-agent as an available model."""
+        """GET /v1/models — return available models.
+
+        Returns the configured model plus all models defined in
+        custom_providers in config.yaml.
+        """
         auth_err = self._check_auth(request)
         if auth_err:
             return auth_err
 
-        return web.json_response({
-            "object": "list",
-            "data": [
-                {
-                    "id": self._model_name,
-                    "object": "model",
-                    "created": int(time.time()),
-                    "owned_by": "hermes",
-                    "permission": [],
-                    "root": self._model_name,
-                    "parent": None,
-                }
-            ],
-        })
+        now = int(time.time())
+
+        def _make_entry(model_id: str, owned_by: str = "hermes") -> dict:
+            return {
+                "id": model_id,
+                "object": "model",
+                "created": now,
+                "owned_by": owned_by,
+                "permission": [],
+                "root": model_id,
+                "parent": None,
+            }
+
+        seen: set[str] = set()
+        data: list[dict] = []
+
+        def _add(model_id: str, owned_by: str = "hermes") -> None:
+            if model_id and model_id not in seen:
+                seen.add(model_id)
+                data.append(_make_entry(model_id, owned_by))
+
+        # Primary configured model always first
+        _add(self._model_name)
+
+        # Collect models from custom_providers in config.yaml
+        try:
+            from hermes_cli.config import load_config, get_compatible_custom_providers
+            cfg = load_config()
+            for entry in get_compatible_custom_providers(cfg):
+                if not isinstance(entry, dict):
+                    continue
+                model = (entry.get("model") or entry.get("default_model") or "").strip()
+                name = (entry.get("name") or "").strip()
+                owned_by = name if name else "hermes"
+                if model:
+                    _add(model, owned_by)
+        except Exception:
+            pass
+
+        return web.json_response({"object": "list", "data": data})
 
     async def _handle_capabilities(self, request: "web.Request") -> "web.Response":
         """GET /v1/capabilities — advertise the stable API surface.
