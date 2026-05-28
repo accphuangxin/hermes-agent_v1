@@ -32,11 +32,14 @@ jobs:
           - arch: arm64
             runner: macos-latest      # Apple Silicon (M-series)
             timeout: 60
+            required: true
           - arch: x86_64
-            runner: macos-13          # Intel — falls back to macos-12 if queue is long
-            timeout: 90               # extra time for slower Intel runner + queue wait
+            runner: macos-13          # Intel — GitHub runner supply is limited; non-blocking
+            timeout: 90
+            required: false
     runs-on: ${{ matrix.runner }}
     timeout-minutes: ${{ matrix.timeout }}
+    continue-on-error: ${{ !matrix.required }}
 
     steps:
       - name: Checkout code
@@ -113,11 +116,12 @@ jobs:
           name: macos-package-arm64
           path: dist/
 
-      - name: Download x86_64 artifact
+      - name: Download x86_64 artifact (optional — Intel runner may have timed out)
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           name: macos-package-x86_64
           path: dist/
+        continue-on-error: true
 
       - name: Wait for GitHub Release to exist
         env:
