@@ -1018,25 +1018,6 @@ class APIServerAdapter(BasePlatformAdapter):
         except Exception:
             pass
 
-        # Collect Bedrock models via discovery when enabled in config.yaml
-        try:
-            from hermes_cli.config import load_config as _lc
-            _cfg = _lc()
-            _bedrock_cfg = _cfg.get("bedrock", {})
-            _discovery = _bedrock_cfg.get("discovery", {})
-            if _discovery.get("enabled"):
-                from agent.bedrock_adapter import discover_bedrock_models
-                _region = (_bedrock_cfg.get("region") or "").strip() or "us-east-1"
-                _provider_filter = _discovery.get("provider_filter") or []
-                _bedrock_models = discover_bedrock_models(_region, _provider_filter)
-                for _bm in _bedrock_models:
-                    _mid = (_bm.get("id") or "").strip()
-                    _provider = (_bm.get("provider") or "bedrock").strip()
-                    if _mid:
-                        _add(_mid, f"bedrock/{_provider}")
-        except Exception:
-            pass
-
         return web.json_response({"object": "list", "data": data})
 
     async def _handle_capabilities(self, request: "web.Request") -> "web.Response":
