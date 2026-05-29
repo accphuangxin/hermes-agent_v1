@@ -887,6 +887,8 @@ class APIServerAdapter(BasePlatformAdapter):
 
         # When a model_override is given, look it up in custom_providers so
         # the correct base_url/api_key/provider is used instead of the global one.
+        # Only override runtime_kwargs when a matching entry is actually found —
+        # placeholder names like "hermes-agent" fall through to global config.
         if model_override:
             try:
                 _custom = user_config.get("custom_providers") or []
@@ -900,7 +902,14 @@ class APIServerAdapter(BasePlatformAdapter):
                         if _cp.get("api_key"):
                             runtime_kwargs["api_key"] = _cp["api_key"]
                         runtime_kwargs["provider"] = "custom"
+                        # Use the matched model; global model stays unchanged
                         break
+                else:
+                    # No custom_providers match — treat model_override as a bare
+                    # model name for the current global provider (e.g. "hermes-agent"
+                    # or any provider-native model id). Reset model to global default
+                    # so the agent uses whatever config.yaml specifies.
+                    model = _resolve_gateway_model()
             except Exception:
                 pass
 
