@@ -857,6 +857,7 @@ class APIServerAdapter(BasePlatformAdapter):
         tool_start_callback=None,
         tool_complete_callback=None,
         gateway_session_key: Optional[str] = None,
+        model_override: Optional[str] = None,
     ) -> Any:
         """
         Create an AIAgent instance using the gateway's runtime config.
@@ -879,10 +880,29 @@ class APIServerAdapter(BasePlatformAdapter):
 
         runtime_kwargs = _resolve_runtime_agent_kwargs()
         reasoning_config = GatewayRunner._load_reasoning_config()
-        model = _resolve_gateway_model()
+        model = model_override or _resolve_gateway_model()
 
         user_config = _load_gateway_config()
         enabled_toolsets = sorted(_get_platform_tools(user_config, "api_server"))
+
+        # When a model_override is given, look it up in custom_providers so
+        # the correct base_url/api_key/provider is used instead of the global one.
+        if model_override:
+            try:
+                _custom = user_config.get("custom_providers") or []
+                for _cp in _custom:
+                    if not isinstance(_cp, dict):
+                        continue
+                    _cp_model = str(_cp.get("model") or _cp.get("default_model") or "").strip()
+                    if _cp_model == model_override:
+                        if _cp.get("base_url"):
+                            runtime_kwargs["base_url"] = _cp["base_url"]
+                        if _cp.get("api_key"):
+                            runtime_kwargs["api_key"] = _cp["api_key"]
+                        runtime_kwargs["provider"] = "custom"
+                        break
+            except Exception:
+                pass
 
         max_iterations = int(os.getenv("HERMES_MAX_ITERATIONS", "90"))
 
@@ -1250,6 +1270,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 tool_complete_callback=_on_tool_complete,
                 agent_ref=agent_ref,
                 gateway_session_key=gateway_session_key,
+                model_override=model_name,
             ))
             # Ensure SSE drain loops can terminate without relying on polling
             # agent_task.done(), which can race with queue timeout checks.
@@ -1269,6 +1290,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 ephemeral_system_prompt=system_prompt,
                 session_id=session_id,
                 gateway_session_key=gateway_session_key,
+                model_override=model_name,
             )
 
         idempotency_key = request.headers.get("Idempotency-Key")
@@ -2271,6 +2293,10 @@ class APIServerAdapter(BasePlatformAdapter):
                 }))
 
             agent_ref = [None]
+            response_id = f"resp_{uuid.uuid4().hex[:28]}"
+            model_name = body.get("model", self._model_name)
+            created_at = int(time.time())
+
             agent_task = asyncio.ensure_future(self._run_agent(
                 user_message=user_message,
                 conversation_history=conversation_history,
@@ -2282,14 +2308,11 @@ class APIServerAdapter(BasePlatformAdapter):
                 tool_complete_callback=_on_tool_complete,
                 agent_ref=agent_ref,
                 gateway_session_key=gateway_session_key,
+                model_override=model_name,
             ))
             # Ensure SSE drain loops can terminate without relying on polling
             # agent_task.done(), which can race with queue timeout checks.
             agent_task.add_done_callback(lambda _fut: _stream_q.put(None))
-
-            response_id = f"resp_{uuid.uuid4().hex[:28]}"
-            model_name = body.get("model", self._model_name)
-            created_at = int(time.time())
 
             return await self._write_sse_responses(
                 request=request,
@@ -2315,6 +2338,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 ephemeral_system_prompt=instructions,
                 session_id=session_id,
                 gateway_session_key=gateway_session_key,
+                model_override=body.get("model", self._model_name),
             )
 
         idempotency_key = request.headers.get("Idempotency-Key")
@@ -2773,6 +2797,7 @@ class APIServerAdapter(BasePlatformAdapter):
         tool_complete_callback=None,
         agent_ref: Optional[list] = None,
         gateway_session_key: Optional[str] = None,
+        model_override: Optional[str] = None,
     ) -> tuple:
         """
         Create an agent and run a conversation in a thread executor.
@@ -2796,6 +2821,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 tool_start_callback=tool_start_callback,
                 tool_complete_callback=tool_complete_callback,
                 gateway_session_key=gateway_session_key,
+                model_override=model_override,
             )
             if agent_ref is not None:
                 agent_ref[0] = agent
@@ -3011,6 +3037,7 @@ class APIServerAdapter(BasePlatformAdapter):
                     stream_delta_callback=_text_cb,
                     tool_progress_callback=event_cb,
                     gateway_session_key=gateway_session_key,
+                    model_override=body.get("model", self._model_name),
                 )
                 self._active_run_agents[run_id] = agent
 
