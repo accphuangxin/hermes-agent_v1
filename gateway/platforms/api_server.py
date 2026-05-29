@@ -692,7 +692,8 @@ class APIServerAdapter(BasePlatformAdapter):
         Priority:
         1. Explicit override (config extra or API_SERVER_MODEL_NAME env var)
         2. Active profile name (so each profile advertises a distinct model)
-        3. Fallback: "hermes-agent"
+        3. Global model.default from config.yaml
+        4. Fallback: "hermes-agent"
         """
         if explicit and explicit.strip():
             return explicit.strip()
@@ -701,6 +702,13 @@ class APIServerAdapter(BasePlatformAdapter):
             profile = get_active_profile_name()
             if profile and profile not in {"default", "custom"}:
                 return profile
+        except Exception:
+            pass
+        try:
+            from gateway.run import _resolve_gateway_model
+            global_model = _resolve_gateway_model()
+            if global_model and global_model.strip():
+                return global_model.strip()
         except Exception:
             pass
         return "hermes-agent"
@@ -1000,8 +1008,14 @@ class APIServerAdapter(BasePlatformAdapter):
                 seen.add(model_id)
                 data.append(_make_entry(model_id, owned_by))
 
-        # Primary configured model always first
-        _add(self._model_name)
+        # Primary configured model always first — re-resolve at request time
+        # so config changes take effect without restarting the gateway.
+        try:
+            from gateway.run import _resolve_gateway_model
+            _primary = _resolve_gateway_model() or self._model_name
+        except Exception:
+            _primary = self._model_name
+        _add(_primary)
 
         # Collect models from custom_providers in config.yaml
         try:
