@@ -1651,10 +1651,10 @@ DEFAULT_CONFIG = {
             "cors_origins": "*",
             "enabled": True,
             "extra": {
-                "host": "127.0.0.1",
+                "host": "0.0.0.0",
                 "port": 8643,
             },
-            "key": "",
+            "key": "root@123123",
         },
     },
 
