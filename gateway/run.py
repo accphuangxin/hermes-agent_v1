@@ -1862,20 +1862,48 @@ class GatewayRunner:
 
         model = _resolve_gateway_model(user_config)
 
-        # Per-platform model override: platforms.<name>.extra.model
+        # Per-platform model/provider override: platforms.<name>.extra.model/provider/base_url/api_key
         # Allows each platform (e.g. weixin, weixin_1) to use a different
-        # model without changing the global default.
+        # model and provider without changing the global default.
+        _platform_runtime_override: dict = {}
         if source is not None and source.platform is not None:
             try:
                 _cfg = user_config if user_config is not None else _load_gateway_config()
                 _plat_val = source.platform.value
                 _plat_cfg = _cfg.get("platforms", {}).get(_plat_val, {})
-                _plat_model = (
-                    _plat_cfg.get("extra", {}).get("model")
-                    or _plat_cfg.get("model")
-                )
+                _extra = _plat_cfg.get("extra", {})
+                _plat_model = _extra.get("model") or _plat_cfg.get("model")
                 if _plat_model:
                     model = str(_plat_model).strip()
+                # Resolve provider name → base_url/api_key via custom_providers
+                _plat_provider = _extra.get("provider") or _plat_cfg.get("provider")
+                if _plat_provider:
+                    _plat_provider = str(_plat_provider).strip()
+                    # Look up base_url/api_key from custom_providers by name
+                    _custom = _cfg.get("custom_providers") or []
+                    _matched = None
+                    for _cp in _custom:
+                        if not isinstance(_cp, dict):
+                            continue
+                        _cp_name = str(_cp.get("name") or "").strip().lower()
+                        # Match "custom:one_api" or bare "one_api"
+                        _lookup = _plat_provider.lower().removeprefix("custom:").strip()
+                        if _cp_name == _lookup:
+                            _matched = _cp
+                            break
+                    if _matched:
+                        if _matched.get("base_url"):
+                            _platform_runtime_override["base_url"] = _matched["base_url"]
+                        if _matched.get("api_key"):
+                            _platform_runtime_override["api_key"] = _matched["api_key"]
+                        _platform_runtime_override["provider"] = "custom"
+                    else:
+                        _platform_runtime_override["provider"] = _plat_provider
+                # Direct base_url/api_key on extra take precedence over lookup
+                if _extra.get("base_url"):
+                    _platform_runtime_override["base_url"] = _extra["base_url"]
+                if _extra.get("api_key"):
+                    _platform_runtime_override["api_key"] = _extra["api_key"]
             except Exception:
                 pass
 
@@ -1917,6 +1945,9 @@ class GatewayRunner:
                 runtime_model,
             )
             model = runtime_model
+        # Apply per-platform provider/base_url/api_key after global resolution
+        if _platform_runtime_override:
+            runtime_kwargs.update(_platform_runtime_override)
         if override and resolved_session_key:
             model, runtime_kwargs = self._apply_session_model_override(
                 resolved_session_key, model, runtime_kwargs
