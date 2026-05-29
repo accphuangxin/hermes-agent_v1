@@ -4199,25 +4199,20 @@ def _is_service_running() -> bool:
 
 
 def _setup_weixin():
-    """Interactive setup for Weixin / WeChat personal accounts."""
+    """Interactive setup for Weixin / WeChat — supports multiple accounts."""
+    import json as _json
+
     print()
     print(color("  ─── 💬 Weixin / WeChat Setup ───", Colors.CYAN))
     print()
-    print_info("  1. Hermes will open Tencent iLink QR login in this terminal.")
-    print_info("  2. Use WeChat to scan and confirm the QR code.")
-    print_info("  3. Hermes will store the returned account_id/token in ~/.hermes/.env.")
-    print_info("  4. This adapter supports native text, image, video, and document delivery.")
-
-    existing_account = get_env_value("WEIXIN_ACCOUNT_ID")
-    existing_token = get_env_value("WEIXIN_TOKEN")
-    if existing_account and existing_token:
-        print()
-        print_success("Weixin is already configured.")
-        if not prompt_yes_no("  Reconfigure Weixin?", False):
-            return
 
     try:
-        from gateway.platforms.weixin import check_weixin_requirements, qr_login
+        from gateway.platforms.weixin import (
+            check_weixin_requirements,
+            qr_login,
+            save_weixin_account,
+        )
+        from gateway.platforms.weixin import _account_dir as _wx_account_dir
     except Exception as exc:
         print_error(f"  Weixin adapter import failed: {exc}")
         print_info("  Install gateway dependencies first, then retry.")
@@ -4228,107 +4223,230 @@ def _setup_weixin():
         print_info("  Install them, then rerun `hermes gateway setup`.")
         return
 
-    print()
-    if not prompt_yes_no("  Start QR login now?", True):
-        print_info("  Cancelled.")
-        return
+    hermes_home = str(get_hermes_home())
 
-    import asyncio
-    try:
-        credentials = asyncio.run(qr_login(str(get_hermes_home())))
-    except KeyboardInterrupt:
+    def _list_saved_accounts():
+        acct_dir = _wx_account_dir(hermes_home)
+        accounts = []
+        for f in sorted(acct_dir.glob("*.json")):
+            if f.name.endswith(".context-tokens.json"):
+                continue
+            try:
+                data = _json.loads(f.read_text(encoding="utf-8"))
+                accounts.append((f.stem, data))
+            except Exception:
+                pass
+        return accounts
+
+    def _load_config_weixin():
+        from hermes_cli.config import load_config
+        cfg = load_config()
+        platforms = cfg.get("platforms", {})
+        wx = platforms.get("weixin")
+        if isinstance(wx, list):
+            return list(wx)
+        if isinstance(wx, dict):
+            return [wx]
+        return []
+
+    def _save_config_weixin(entries):
+        from hermes_cli.config import load_config, save_config
+        cfg = load_config()
+        if "platforms" not in cfg or not isinstance(cfg["platforms"], dict):
+            cfg["platforms"] = {}
+        if len(entries) == 0:
+            cfg["platforms"].pop("weixin", None)
+        elif len(entries) == 1:
+            cfg["platforms"]["weixin"] = entries[0]
+        else:
+            cfg["platforms"]["weixin"] = entries
+        save_config(cfg)
+
+    def _do_qr_login():
+        import asyncio
         print()
-        print_warning("  Weixin setup cancelled.")
-        return
-    except Exception as exc:
-        print_error(f"  QR login failed: {exc}")
-        return
+        print_info("  扫描二维码登录微信...")
+        try:
+            creds = asyncio.run(qr_login(hermes_home))
+        except KeyboardInterrupt:
+            print()
+            print_warning("  Weixin login cancelled.")
+            return None
+        except Exception as exc:
+            print_error(f"  QR login failed: {exc}")
+            return None
+        if not creds:
+            print_warning("  QR login did not complete.")
+        return creds
 
-    if not credentials:
-        print_warning("  QR login did not complete.")
-        return
+    def _ask_dm_policy(user_id=""):
+        access_choices = [
+            "Allow all direct messages",
+            "Use DM pairing approval",
+            "Only allow listed user IDs",
+            "Disable direct messages",
+        ]
+        access_idx = prompt_choice("  Direct message policy?", access_choices, 0)
+        if access_idx == 0:
+            return {"dm_policy": "open"}
+        elif access_idx == 1:
+            return {"dm_policy": "pairing"}
+        elif access_idx == 2:
+            allowlist = prompt("  Allowed Weixin user IDs (comma-separated)", user_id, password=False).replace(" ", "")
+            return {"dm_policy": "allowlist", "allow_from": allowlist}
+        else:
+            return {"dm_policy": "disabled"}
 
-    account_id = credentials.get("account_id", "")
-    token = credentials.get("token", "")
-    base_url = credentials.get("base_url", "")
-    user_id = credentials.get("user_id", "")
+    # ── Main menu ──
+    while True:
+        saved = _list_saved_accounts()
+        cfg_entries = _load_config_weixin()
 
-    save_env_value("WEIXIN_ACCOUNT_ID", account_id)
-    save_env_value("WEIXIN_TOKEN", token)
-    if base_url:
-        save_env_value("WEIXIN_BASE_URL", base_url)
-    save_env_value("WEIXIN_CDN_BASE_URL", get_env_value("WEIXIN_CDN_BASE_URL") or "https://novac2c.cdn.weixin.qq.com/c2c")
-
-    print()
-    access_choices = [
-        "Use DM pairing approval (recommended)",
-        "Allow all direct messages",
-        "Only allow listed user IDs",
-        "Disable direct messages",
-    ]
-    access_idx = prompt_choice("  How should direct messages be authorized?", access_choices, 0)
-    if access_idx == 0:
-        save_env_value("WEIXIN_DM_POLICY", "pairing")
-        save_env_value("WEIXIN_ALLOW_ALL_USERS", "false")
-        save_env_value("WEIXIN_ALLOWED_USERS", "")
-        print_success("  DM pairing enabled.")
-        print_info("  Unknown DM users can request access and you approve them with `hermes pairing approve`.")
-    elif access_idx == 1:
-        save_env_value("WEIXIN_DM_POLICY", "open")
-        save_env_value("WEIXIN_ALLOW_ALL_USERS", "true")
-        save_env_value("WEIXIN_ALLOWED_USERS", "")
-        print_warning("  Open DM access enabled for Weixin.")
-    elif access_idx == 2:
-        default_allow = user_id or ""
-        allowlist = prompt("  Allowed Weixin user IDs (comma-separated)", default_allow, password=False).replace(" ", "")
-        save_env_value("WEIXIN_DM_POLICY", "allowlist")
-        save_env_value("WEIXIN_ALLOW_ALL_USERS", "false")
-        save_env_value("WEIXIN_ALLOWED_USERS", allowlist)
-        print_success("  Weixin allowlist saved.")
-    else:
-        save_env_value("WEIXIN_DM_POLICY", "disabled")
-        save_env_value("WEIXIN_ALLOW_ALL_USERS", "false")
-        save_env_value("WEIXIN_ALLOWED_USERS", "")
-        print_warning("  Direct messages disabled.")
-
-    print()
-    print_info("  Note: QR login connects an iLink bot identity (e.g. ...@im.bot), not a")
-    print_info("  scriptable personal WeChat account. Ordinary WeChat groups typically cannot")
-    print_info("  invite an @im.bot identity, and iLink does not deliver ordinary-group events")
-    print_info("  to most bot accounts. The settings below only apply when iLink actually")
-    print_info("  delivers group events for your account type — otherwise DM remains the only")
-    print_info("  working channel regardless of this choice.")
-    group_choices = [
-        "Disable group chats (recommended)",
-        "Allow all group chats",
-        "Only allow listed group chat IDs",
-    ]
-    group_idx = prompt_choice("  How should group chats be handled?", group_choices, 0)
-    if group_idx == 0:
-        save_env_value("WEIXIN_GROUP_POLICY", "disabled")
-        save_env_value("WEIXIN_GROUP_ALLOWED_USERS", "")
-        print_info("  Group chats disabled.")
-    elif group_idx == 1:
-        save_env_value("WEIXIN_GROUP_POLICY", "open")
-        save_env_value("WEIXIN_GROUP_ALLOWED_USERS", "")
-        print_warning("  All group chats enabled (only takes effect if iLink delivers group events).")
-    else:
-        allow_groups = prompt("  Allowed group chat IDs (comma-separated, not member user IDs)", "", password=False).replace(" ", "")
-        save_env_value("WEIXIN_GROUP_POLICY", "allowlist")
-        save_env_value("WEIXIN_GROUP_ALLOWED_USERS", allow_groups)
-        print_success("  Group allowlist saved (only takes effect if iLink delivers group events).")
-
-    if user_id:
         print()
-        if prompt_yes_no(f"  Use your Weixin user ID ({user_id}) as the home channel?", True):
-            save_env_value("WEIXIN_HOME_CHANNEL", user_id)
-            print_success(f"  Home channel set to {user_id}")
+        if saved:
+            print_success(f"  已配置 {len(saved)} 个微信账号:")
+            for acc_id, data in saved:
+                uid = data.get("user_id", "")
+                saved_at = data.get("saved_at", "")[:10]
+                in_cfg = any(
+                    e.get("extra", {}).get("account_id") == acc_id or
+                    e.get("account_id") == acc_id
+                    for e in cfg_entries
+                )
+                status = "✓ 已启用" if in_cfg else "○ 未启用"
+                print_info(f"    [{status}] {acc_id}" + (f"  (user: {uid})" if uid else "") + (f"  saved: {saved_at}" if saved_at else ""))
+        else:
+            print_info("  暂无已配置的微信账号。")
+
+        print()
+        menu_choices = ["添加新微信账号（扫码登录）"]
+        if saved:
+            menu_choices.append("从已有账号中启用/禁用")
+            menu_choices.append("删除账号")
+        menu_choices.append("完成")
+
+        action_idx = prompt_choice("  请选择操作:", menu_choices, 0)
+        action = menu_choices[action_idx]
+
+        if action == "完成":
+            break
+
+        elif action == "添加新微信账号（扫码登录）":
+            creds = _do_qr_login()
+            if not creds:
+                continue
+
+            account_id = creds.get("account_id", "")
+            token = creds.get("token", "")
+            base_url = creds.get("base_url", "")
+            user_id = creds.get("user_id", "")
+
+            if not account_id or not token:
+                print_error("  登录未返回有效的 account_id / token。")
+                continue
+
+            # Save credentials to ~/.hermes/weixin/accounts/<id>.json
+            save_weixin_account(
+                hermes_home,
+                account_id=account_id,
+                token=token,
+                base_url=base_url or "https://ilinkai.weixin.qq.com",
+                user_id=user_id,
+            )
+
+            dm_cfg = _ask_dm_policy(user_id)
+
+            new_entry = {
+                "enabled": True,
+                "token": token,
+                "extra": {
+                    "account_id": account_id,
+                    **dm_cfg,
+                    "group_policy": "disabled",
+                },
+            }
+            if base_url:
+                new_entry["extra"]["base_url"] = base_url
+
+            # Replace existing entry for same account_id, or append
+            entries = _load_config_weixin()
+            replaced = False
+            for i, e in enumerate(entries):
+                if e.get("extra", {}).get("account_id") == account_id:
+                    entries[i] = new_entry
+                    replaced = True
+                    break
+            if not replaced:
+                entries.append(new_entry)
+            _save_config_weixin(entries)
+
+            print()
+            print_success(f"  微信账号 {account_id} 已添加并写入 config.yaml")
+            if user_id:
+                print_info(f"  User ID: {user_id}")
+
+        elif action == "从已有账号中启用/禁用":
+            acct_choices = [f"{acc_id}" + (f" (user: {d.get('user_id','')})" if d.get('user_id') else "") for acc_id, d in saved]
+            acct_choices.append("取消")
+            idx = prompt_choice("  选择账号:", acct_choices, 0)
+            if idx >= len(saved):
+                continue
+            acc_id, acc_data = saved[idx]
+            token = acc_data.get("token", "")
+            base_url = acc_data.get("base_url", "https://ilinkai.weixin.qq.com")
+            user_id = acc_data.get("user_id", "")
+
+            entries = _load_config_weixin()
+            existing = next((e for e in entries if e.get("extra", {}).get("account_id") == acc_id), None)
+            if existing:
+                if prompt_yes_no(f"  账号 {acc_id} 已启用，是否禁用？", False):
+                    entries = [e for e in entries if e.get("extra", {}).get("account_id") != acc_id]
+                    _save_config_weixin(entries)
+                    print_success(f"  账号 {acc_id} 已从 config.yaml 中移除。")
+            else:
+                dm_cfg = _ask_dm_policy(user_id)
+                new_entry = {
+                    "enabled": True,
+                    "token": token,
+                    "extra": {
+                        "account_id": acc_id,
+                        **dm_cfg,
+                        "group_policy": "disabled",
+                    },
+                }
+                if base_url:
+                    new_entry["extra"]["base_url"] = base_url
+                entries.append(new_entry)
+                _save_config_weixin(entries)
+                print_success(f"  账号 {acc_id} 已启用并写入 config.yaml。")
+
+        elif action == "删除账号":
+            acct_choices = [f"{acc_id}" + (f" (user: {d.get('user_id','')})" if d.get('user_id') else "") for acc_id, d in saved]
+            acct_choices.append("取消")
+            idx = prompt_choice("  选择要删除的账号:", acct_choices, len(saved))
+            if idx >= len(saved):
+                continue
+            acc_id, _ = saved[idx]
+            if prompt_yes_no(f"  确认删除账号 {acc_id}？", False):
+                # Remove from config.yaml
+                entries = [e for e in _load_config_weixin() if e.get("extra", {}).get("account_id") != acc_id]
+                _save_config_weixin(entries)
+                # Remove credentials file
+                from gateway.platforms.weixin import _account_file as _wx_account_file
+                cred_file = _wx_account_file(hermes_home, acc_id)
+                try:
+                    cred_file.unlink()
+                except Exception:
+                    pass
+                print_success(f"  账号 {acc_id} 已删除。")
 
     print()
-    print_success("Weixin configured!")
-    print_info(f"  Account ID: {account_id}")
-    if user_id:
-        print_info(f"  User ID: {user_id}")
+    final = _load_config_weixin()
+    if final:
+        print_success(f"Weixin 配置完成，共 {len(final)} 个账号已启用。")
+        print_info("  重启 gateway 生效: hermes gateway restart")
+    else:
+        print_info("  没有启用任何微信账号。")
 
 
 def _setup_feishu():
