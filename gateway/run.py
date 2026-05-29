@@ -1861,6 +1861,24 @@ class GatewayRunner:
                 resolved_session_key = None
 
         model = _resolve_gateway_model(user_config)
+
+        # Per-platform model override: platforms.<name>.extra.model
+        # Allows each platform (e.g. weixin, weixin_1) to use a different
+        # model without changing the global default.
+        if source is not None and source.platform is not None:
+            try:
+                _cfg = user_config if user_config is not None else _load_gateway_config()
+                _plat_val = source.platform.value
+                _plat_cfg = _cfg.get("platforms", {}).get(_plat_val, {})
+                _plat_model = (
+                    _plat_cfg.get("extra", {}).get("model")
+                    or _plat_cfg.get("model")
+                )
+                if _plat_model:
+                    model = str(_plat_model).strip()
+            except Exception:
+                pass
+
         override = self._session_model_overrides.get(resolved_session_key) if resolved_session_key else None
         if override:
             override_model = override.get("model", model)
