@@ -1011,11 +1011,17 @@ class APIServerAdapter(BasePlatformAdapter):
         # Primary configured model always first — re-resolve at request time
         # so config changes take effect without restarting the gateway.
         try:
-            from gateway.run import _resolve_gateway_model
-            _primary = _resolve_gateway_model() or self._model_name
+            from gateway.run import _resolve_gateway_model, _load_gateway_config
+            _gcfg = _load_gateway_config()
+            _primary = _resolve_gateway_model(_gcfg) or self._model_name
+            _model_cfg = _gcfg.get("model", {})
+            _primary_provider = (
+                str(_model_cfg.get("provider") or "hermes").strip() if isinstance(_model_cfg, dict) else "hermes"
+            )
         except Exception:
             _primary = self._model_name
-        _add(_primary)
+            _primary_provider = "hermes"
+        _add(_primary, _primary_provider)
 
         # Collect models from custom_providers in config.yaml
         try:
