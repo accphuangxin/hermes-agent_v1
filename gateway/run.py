@@ -5430,7 +5430,7 @@ class GatewayRunner:
                 return None
             return WeComAdapter(config)
 
-        elif platform == Platform.WEIXIN:
+        elif platform == Platform.WEIXIN or platform.value.startswith("weixin_"):
             from gateway.platforms.weixin import WeixinAdapter, check_weixin_requirements
             if not check_weixin_requirements():
                 logger.warning("Weixin: aiohttp/cryptography not installed")

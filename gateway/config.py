@@ -762,7 +762,23 @@ def load_gateway_config() -> GatewayConfig:
                 platforms_data = {}
                 gw_data["platforms"] = platforms_data
             if isinstance(yaml_platforms, dict):
+                # Expand list-valued platform entries (e.g. weixin: [...])
+                # into numbered slots: weixin, weixin_1, weixin_2, ...
+                # This lets users configure multiple accounts for the same
+                # platform type without changing the adapters dict structure.
+                _MULTI_INSTANCE_PLATFORMS = {"weixin"}
+                expanded_platforms: dict = {}
                 for plat_name, plat_block in yaml_platforms.items():
+                    if plat_name in _MULTI_INSTANCE_PLATFORMS and isinstance(plat_block, list):
+                        for idx, entry in enumerate(plat_block):
+                            if not isinstance(entry, dict):
+                                continue
+                            slot = plat_name if idx == 0 else f"{plat_name}_{idx}"
+                            expanded_platforms[slot] = entry
+                    else:
+                        expanded_platforms[plat_name] = plat_block
+
+                for plat_name, plat_block in expanded_platforms.items():
                     if not isinstance(plat_block, dict):
                         continue
                     existing = platforms_data.get(plat_name, {})
