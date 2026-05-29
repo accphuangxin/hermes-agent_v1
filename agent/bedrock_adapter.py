@@ -58,64 +58,26 @@ def _require_boto3():
         )
 
 
-def _make_boto3_client(service: str, region: str):
-    """Create a boto3 client, injecting AWS_BEARER_TOKEN_BEDROCK when present.
-
-    Claude Code / Amazon Q use a Bearer Token (AWS_BEARER_TOKEN_BEDROCK) instead
-    of standard IAM credentials. boto3 doesn't pick this up automatically, so we
-    inject it via botocore's token_provider mechanism when the env var is set.
-    """
-    boto3 = _require_boto3()
-    bearer_token = os.environ.get("AWS_BEARER_TOKEN_BEDROCK", "").strip()
-    if bearer_token:
-        try:
-            import botocore.session
-            import botocore.credentials
-
-            botocore_session = botocore.session.get_session()
-
-            class _StaticBearerTokenProvider:
-                def load(self):
-                    return botocore.credentials.DeferredRefreshableCredentials(
-                        lambda: {
-                            "access_key": "bearer",
-                            "secret_key": "bearer",
-                            "token": bearer_token,
-                            "expiry_time": None,
-                        },
-                        method="bearer-token",
-                    )
-
-            # Inject bearer token as HTTP Authorization header via an event
-            boto3_session = boto3.Session(botocore_session=botocore_session)
-            client = boto3_session.client(service, region_name=region)
-
-            # Patch the signer: replace SigV4 with a plain Bearer header
-            def _inject_bearer(request, **_kwargs):
-                request.headers["Authorization"] = f"Bearer {bearer_token}"
-                # Remove any SigV4 headers that were already added
-                for h in ("x-amz-security-token", "x-amz-date", "x-amz-content-sha256"):
-                    request.headers.pop(h, None)
-
-            client.meta.events.register("before-send.bedrock*.*", _inject_bearer)
-            return client
-        except Exception:
-            pass  # Fall through to standard credential chain
-
-    return boto3.client(service, region_name=region)
-
-
 def _get_bedrock_runtime_client(region: str):
-    """Get or create a cached ``bedrock-runtime`` client for the given region."""
+    """Get or create a cached ``bedrock-runtime`` client for the given region.
+
+    Uses the default AWS credential chain (env vars → profile → instance role).
+    """
     if region not in _bedrock_runtime_client_cache:
-        _bedrock_runtime_client_cache[region] = _make_boto3_client("bedrock-runtime", region)
+        boto3 = _require_boto3()
+        _bedrock_runtime_client_cache[region] = boto3.client(
+            "bedrock-runtime", region_name=region,
+        )
     return _bedrock_runtime_client_cache[region]
 
 
 def _get_bedrock_control_client(region: str):
     """Get or create a cached ``bedrock`` control-plane client for model discovery."""
     if region not in _bedrock_control_client_cache:
-        _bedrock_control_client_cache[region] = _make_boto3_client("bedrock", region)
+        boto3 = _require_boto3()
+        _bedrock_control_client_cache[region] = boto3.client(
+            "bedrock", region_name=region,
+        )
     return _bedrock_control_client_cache[region]
 
 
